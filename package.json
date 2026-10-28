@@ -6,13 +6,14 @@
     "assets:prepare": "node scripts/prepare-assets.mjs",
     "postinstall": "pnpm assets:prepare",
     "predev": "pnpm assets:prepare",
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack --hostname 127.0.0.1",
     "prebuild": "pnpm assets:prepare",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
-    "check": "pnpm lint && pnpm typecheck"
+    "check": "pnpm lint && pnpm typecheck",
+    "test": "node --import ./tests/register.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.104",

@@ -5,10 +5,40 @@ decisions; it is not a list of features that have already been built.
 
 ## Current status and authorization
 
-The first authorized delivery covers structure, dependencies, configuration, and
-documentation only. The home page is a placeholder.
-Upload, resume extraction, adaptation, block review, application persistence,
-and final PDF generation are not implemented.
+The initial scaffolding delivery is complete. On October 28, 2026, Federico
+authorized the first feature: local master PDF upload with Storage and database
+persistence. The implementation is complete locally; the table migration must
+still be applied manually and the real Supabase round trip is not verified.
+Resume extraction, master validation/activation, adaptation, block review,
+application persistence, and final PDF generation are not implemented.
+
+### First feature: confirmed upload scope
+
+- One file per selection through **Upload Master Resume**; disabled button with
+  **Uploading…** while the request is running, inline success/error feedback.
+- Server validation: real PDF signature and readable document/page tree, nonempty,
+  at most 10 MB (10,485,760 bytes), no encryption/password protection. This does
+  not validate resume contents or require selectable text.
+- Use the existing `resumes` bucket, which the user created. Require it to be
+  private before sending files; remote settings were not inspected.
+- Each upload is independent, including repeated original filenames. Store under
+  `masters/<uuid>.pdf`; keep original filename, byte size, MIME type, bucket,
+  path, UUID, and database timestamp in `master_resume_uploads`.
+- Uploading does not activate or validate a master.
+- Show `<filename> uploaded!` only after Storage and the insert succeed. If an
+  insert is explicitly rejected, attempt object removal; surface failed cleanup.
+  A missing/ambiguous insert response preserves the object to avoid deleting a
+  possibly committed record’s PDF, and asks the user to inspect before retrying.
+  Storage and Postgres do not form an atomic transaction; process interruption
+  may require manual reconciliation.
+- Local development only: bind the dev server to loopback and enforce same-origin,
+  loopback requests in development. Production uploads remain disabled pending
+  access control. Do not expose the dev server through tunnels/proxies.
+- Deliver SQL and setup instructions for the user to apply; no remote changes
+  or real resume uploads were authorized for local verification. See
+  [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+- Offline tests cover PDF validation, local access, multipart limits, independent
+  uploads, private-bucket enforcement, and Storage/DB compensation failures.
 
 ## Goal
 
@@ -117,7 +147,9 @@ The personal resume stays outside the repository and `public/`.
 - Hosting and access control/authentication remain pending. The intended deployment
   is a public website, but resumes and the bucket are not public. Before exposing
   operations on real data or paid API calls, decide who can invoke them.
-- Remote Supabase resources, bucket, schema/migrations, and database types are pending.
+- The user created the remote `resumes` bucket. The upload schema migration is
+  prepared for manual application; remote verification, the remaining product
+  schema, and generated database types are pending.
 - Complete font files and the final template remain pending.
 
 ## Suggested order once product implementation is authorized
