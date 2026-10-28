@@ -5,11 +5,9 @@ import { braintrustAISDKTelemetry, initLogger } from "braintrust";
 let initialized = false;
 
 export function initializeBraintrust() {
-  const apiKey = process.env.BRAINTRUST_API_KEY?.trim();
-  if (initialized || !apiKey) return;
+  if (initialized) return;
   initLogger({
-    apiKey,
-    projectName: process.env.BRAINTRUST_PROJECT_NAME?.trim() || "resume-adapter",
+    projectName: "resume-adapter",
   });
   // AI SDK 7 uses telemetry registration, not the v3-v6 wrapAISDK integration.
   registerTelemetry(braintrustAISDKTelemetry());

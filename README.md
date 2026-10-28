@@ -41,15 +41,16 @@ All variables are server-side; do not use the `NEXT_PUBLIC_` prefix for credenti
 | `OPENAI_API_KEY` | OpenAI API key |
 | `OPENAI_MODEL` | Fixed OpenAI model; initially `gpt-6.1-sol` |
 | `OPENAI_REASONING_EFFORT` | Default reasoning effort: `low`, `medium`, `high`, `xhigh`, or `max`; defaults to `low` |
-| `BRAINTRUST_API_KEY` | Enables tracing when a key is provided |
-| `BRAINTRUST_PROJECT_NAME` | Tracing project; defaults to `resume-adapter` |
+| `BRAINTRUST_API_KEY` | Tracing credentials; discovered automatically by the SDK locally, set explicitly in production |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SECRET_KEY` | Backend secret key; never exposed to the browser |
 | `SUPABASE_STORAGE_BUCKET` | Planned private bucket name; defaults to `resumes` |
 
 OpenAI and Supabase validate variables when their clients are constructed, not
 at module import or build time. Braintrust starts through `src/instrumentation.ts`
-when a key is provided. Traces may contain inputs and outputs from future calls.
+for the `resume-adapter` project and discovers credentials through the SDK.
+The Next.js config wrapper enables auto-instrumentation. Traces may contain
+inputs and outputs from future calls.
 
 Accounts, remote resources, tables, and the bucket are not set up.
 The app does not call OpenAI, upload files, or send sample traces.

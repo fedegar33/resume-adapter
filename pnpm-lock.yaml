@@ -24,7 +24,7 @@ importers:
         specifier: ^7.0.155
         version: 7.0.155(zod@4.6.7)
       braintrust:
-        specifier: ^3.40.0
+        specifier: 3.40.0
         version: 3.40.0(@types/react@19.3.0)(zod@4.6.7)
       client-only:
         specifier: ^0.0.1

@@ -95,8 +95,11 @@ The personal resume stays outside the repository and `public/`.
   `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT`, with no model selector in the UI.
   The model factory applies reasoning defaults through AI SDK middleware.
 - Zod for structures and environment variables; it does not verify factual accuracy.
-- Braintrust for traces. AI SDK 7 integration through telemetry registration;
-  enabled by providing `BRAINTRUST_API_KEY`. It may record inputs/outputs.
+- Braintrust 3.40.0 for traces. Next.js auto-instrumentation through the config
+  wrapper, with AI SDK 7 telemetry registration. The logger uses the fixed project
+  `resume-adapter` and SDK credential discovery. It may record inputs/outputs.
+  Tracing setup was updated on October 28, 2026; verification is static only,
+  without running the application or sending sample traces.
 - Evals will come later, defined in code; there is no dataset or scorer setup yet.
 - Supabase JS with a backend secret client; no session auth/SSR integration yet.
 - `monaco-editor` + `@monaco-editor/react`, serving installed assets locally.
