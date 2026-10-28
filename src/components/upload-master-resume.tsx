@@ -5,7 +5,9 @@ import { MAX_RESUME_BYTES } from "@/lib/resumes/upload";
 
 type Feedback = { kind: "success" | "error"; message: string } | null;
 
-export function UploadMasterResume({ enabled }: { enabled: boolean }) {
+export type UploadedResume = { id: string; filename: string; file: File };
+
+export function UploadMasterResume({ enabled, onUploaded, hasEdits = false }: { enabled: boolean; onUploaded?: (resume: UploadedResume) => void; hasEdits?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
   const [uploading, setUploading] = useState(false);
@@ -26,10 +28,11 @@ export function UploadMasterResume({ enabled }: { enabled: boolean }) {
       const body = new FormData();
       body.set("file", file);
       const response = await fetch("/api/master-resume", { method: "POST", body });
-      const result: { filename?: string; error?: string } = await response.json();
+      const result: { id?: string; filename?: string; error?: string } = await response.json();
       if (!response.ok) throw new Error(result.error || "The upload failed. Please try again.");
-      if (typeof result.filename !== "string") throw new Error("The upload could not be confirmed. Please try again.");
+      if (typeof result.filename !== "string" || typeof result.id !== "string") throw new Error("The upload could not be confirmed. Please try again.");
       setFeedback({ kind: "success", message: `${result.filename} uploaded!` });
+      onUploaded?.({ id: result.id, filename: result.filename, file });
     } catch (error) {
       setFeedback({ kind: "error", message: error instanceof Error && error.message !== "Failed to fetch" ? error.message : "Connection lost. Check whether the upload completed before retrying." });
     } finally {
@@ -39,11 +42,13 @@ export function UploadMasterResume({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <section className="mt-10" aria-label="Upload master resume" aria-busy={uploading}>
+    <section aria-label="Upload master resume" aria-busy={uploading}>
       <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="hidden" aria-label="Choose master resume PDF" onChange={upload} disabled={!enabled || uploading} />
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          if (!hasEdits || window.confirm("Uploading another PDF will replace the current Markdown edits. Continue?")) inputRef.current?.click();
+        }}
         disabled={!enabled || uploading}
         aria-describedby="upload-help upload-feedback"
         className="min-h-11 rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm enabled:cursor-pointer enabled:hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:opacity-50"

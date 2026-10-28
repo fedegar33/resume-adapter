@@ -7,10 +7,17 @@ decisions; it is not a list of features that have already been built.
 
 The initial scaffolding delivery is complete. On October 28, 2026, Federico
 authorized the first feature: local master PDF upload with Storage and database
-persistence. The implementation is complete locally; the table migration must
-still be applied manually and the real Supabase round trip is not verified.
-Resume extraction, master validation/activation, adaptation, block review,
-application persistence, and final PDF generation are not implemented.
+persistence. Federico subsequently reported that Storage and database persistence
+are working. The agent has not independently verified the remote configuration.
+The upload feature was committed and pushed as `7cceed8` before starting the
+second feature.
+
+Federico then authorized text extraction, Markdown organization, and a review
+interface with editable Markdown and the original PDF side by side. Federico
+then requested the PDF on the left, Markdown on the right, and continuous PDF
+scrolling in place of previous/next page controls.
+These are implemented locally. Master validation/activation, adaptation, block
+review, application persistence, and final PDF generation are not implemented.
 
 ### First feature: confirmed upload scope
 
@@ -39,6 +46,37 @@ application persistence, and final PDF generation are not implemented.
   [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 - Offline tests cover PDF validation, local access, multipart limits, independent
   uploads, private-bucket enforcement, and Storage/DB compensation failures.
+
+### Second feature: extraction and content review
+
+- After upload succeeds, open the same selected PDF locally in the browser with
+  PDF.js. Share the document between text extraction and original-page rendering;
+  do not create public URLs, download from Storage again, or call an AI service.
+- Propose Markdown from positional text fragments, font differences, font sizes,
+  and spacing. Recognize common section headings; propose nested project headings
+  within Experience. Preserve text and dates without rewriting facts.
+- Join wrapped lines into paragraphs; cautiously join lower-case continuations
+  across physical page breaks. Retain ambiguous breaks for manual correction.
+  This is heuristic organization, not verified semantic extraction.
+- Preserve safe HTTP(S), mailto, and telephone annotation links; discard executable
+  link targets and escape source Markdown/HTML punctuation. Neither PDF text nor
+  edited Markdown is executed or rendered as HTML.
+- Desktop: original PDF on the **left**, Markdown editor on the **right**. The
+  original displays all pages in a vertically scrollable panel, with page labels
+  and no previous/next buttons, and scales to the panel width. On small
+  screens, switch between Edit Markdown and Original PDF without losing edits.
+- Reuse Monaco as a single editor with wrapping and an editable textarea fallback
+  during loading. The DiffEditor remains reserved for adaptation comparison later.
+- Preserve the existing successful upload if extraction fails; show a distinct
+  explanation and allow manual typing/pasting. Empty/scanned PDFs show a no-text
+  message; OCR is not implemented. An upload error leaves the current review intact.
+- Markdown corrections exist in the current tab only; they are not persisted or
+  approved. Warn on reload/close and before replacing edited content with another
+  upload. Reloading does not reopen an uploaded PDF automatically.
+- No content approval, master activation, template preview, or new database schema
+  is introduced. Saving reviewed content belongs to the next phase.
+- Offline tests use synthetic two-page PDFs and cover extraction, heading/project
+  organization, paragraphs across pages, bullets, links, empty pages, and cancellation.
 
 ## Goal
 
@@ -152,9 +190,10 @@ The personal resume stays outside the repository and `public/`.
   schema, and generated database types are pending.
 - Complete font files and the final template remain pending.
 
-## Suggested order once product implementation is authorized
+## Remaining implementation order
 
-1. Validate the round trip: reference PDF → reviewed Markdown → templated PDF.
+1. Complete the round trip: review extraction quality with the reference PDF,
+   build the visual template, and generate a matching PDF from reviewed Markdown.
 2. Implement job interpretation and structured adaptation with OpenAI/Zod.
 3. Implement block review on top of Monaco and the final preview.
 4. Add immutable master persistence and finalized applications in Supabase.

@@ -3,8 +3,8 @@
 Personal tool that adapts an English resume to a job description
 and lets the user review changes before downloading a PDF.
 
-**Status:** integration setup and local master PDF upload are implemented.
-Extraction, adaptation, and master validation remain planned. Confirmed scope is in [docs/PROJECT.md](docs/PROJECT.md),
+**Status:** local PDF upload, browser text extraction, and Markdown/PDF review
+are implemented. Adaptation, template generation, and master activation remain planned. Confirmed scope is in [docs/PROJECT.md](docs/PROJECT.md),
 and agent instructions are in [AGENTS.md](AGENTS.md).
 
 ## Local development
@@ -56,24 +56,36 @@ for the `resume-adapter` project and discovers credentials through the SDK.
 The Next.js config wrapper enables auto-instrumentation. Traces may contain
 inputs and outputs from future calls.
 
-The user created the `resumes` bucket; its remote settings are unverified.
-The table migration must be applied manually. Each successful upload stores an
+The user created the `resumes` bucket and reported working upload persistence.
+For a new setup, apply the table migration manually; the agent has not independently
+verified remote settings. Each successful upload stores an
 independent PDF and a `master_resume_uploads` record, without activating a master.
 Public authentication/access control remain pending; the endpoint accepts only
 same-origin local development requests. There are no AI/generation endpoints.
+
+After upload, the browser extracts text from the selected PDF and proposes
+Markdown in an editor on the right, with the original PDF on the left. The PDF
+preview displays all pages in a vertically scrollable panel. Small
+screens switch views. Review the conversion carefully: section/project detection
+and paragraph joining are heuristic. PDFs without selectable text need manual
+typing/pasting; OCR is not implemented. Corrections stay in the current tab and
+are lost on reload; saving/activating a master belongs to the next phase. No AI
+calls or extra Storage downloads are used for this review.
 
 ## Structure
 
 ```text
 src/
   app/                         # Layout, home, and local upload endpoint
-  components/editor/           # Client-side Monaco DiffEditor wrapper
+  components/editor/           # Markdown editor and adaptation DiffEditor wrapper
+  components/pdf/              # Original PDF canvas viewer
+  components/resume-workspace.tsx # Upload and content review workflow
   lib/
     ai/model.server.ts         # OpenAI model factory
     env.server.ts              # Configuration validation with Zod
     markdown/processor.ts      # Parsing/serialization with unified + remark
     observability/             # Braintrust telemetry registration for AI SDK 7
-    pdf/                       # Browser reader, Node validation, and PDF styles
+    pdf/                       # Browser extraction, Node validation, and PDF styles
     resumes/                   # Upload validation and Storage/DB persistence
     supabase/server.ts         # Privileged server-only client
   instrumentation.ts           # Node observability initialization
@@ -81,7 +93,7 @@ scripts/prepare-assets.mjs      # Copies installed package assets to public/vend
 docs/PROJECT.md                # Decisions, scope, pending work, and next phase
 docs/SUPABASE_SETUP.md          # Manual bucket/table setup and verification
 supabase/migrations/            # SQL to apply manually
-tests/                         # Offline upload behavior tests
+tests/                         # Offline upload and synthetic-PDF extraction tests
 ```
 
 ## Prepared integrations
@@ -100,11 +112,13 @@ tests/                         # Offline upload behavior tests
   compensating cleanup after a rejected insert. Public authorization is pending.
 - **Monaco:** `ResumeDiffEditor`, side-by-side Markdown, a read-only original,
   an editable proposal, and visual line wrapping. It exposes `onMount` for editor
-  access; block approval and saving are pending. It is not mounted on the home page.
+  access; block approval and saving are pending. The upload review uses a separate
+  single Markdown editor; the DiffEditor is not mounted on the home page.
 - **PDF.js:** `getPdfReader()` loads the module in the browser and configures its worker.
   Use `pdfReaderOptions` when calling `getDocument` to load local assets.
   A separate Node-only legacy reader validates uploaded PDFs without rendering
-  or extracting text. Resume extraction and conversion are not implemented yet.
+  or extracting text. The browser reader extracts positional text into proposed
+  Markdown and renders the original PDF in the review panel.
 - **React PDF:** Letter page size and base styles; the template and complete
   Instrument Sans / EB Garamond font files remain pending. Next automatically
   externalizes this package on the backend.

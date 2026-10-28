@@ -7,7 +7,7 @@ registerHooks({
     return nextLoad(url, url.endsWith(".ts") ? { ...context, format: "module-typescript" } : context);
   },
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
+    if (specifier === "server-only" || specifier === "client-only") {
       return { url: "data:text/javascript,export {};", shortCircuit: true };
     }
     if (specifier.startsWith("@/")) {
