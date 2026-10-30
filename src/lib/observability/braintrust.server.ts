@@ -10,6 +10,14 @@ export function initializeBraintrust() {
     projectName: "resume-adapter",
   });
   // AI SDK 7 uses telemetry registration, not the v3-v6 wrapAISDK integration.
-  registerTelemetry(braintrustAISDKTelemetry());
+  const telemetry = braintrustAISDKTelemetry();
+  registerTelemetry({
+    ...telemetry,
+    // Provider errors may include request/response bodies. Keep automatic error
+    // status/timing without copying PDF bytes or credentials from exceptions.
+    onError(event) {
+      return telemetry.onError?.({ ...(event && typeof event === "object" ? event : {}), error: new Error("AI request failed; see application feedback.") });
+    },
+  });
   initialized = true;
 }

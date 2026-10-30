@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
-function PdfPage({ document, pageNumber, width }: { document: PDFDocumentProxy; pageNumber: number; width: number }) {
+function PdfPage({ document, pageNumber, width, onRendered }: { document: PDFDocumentProxy; pageNumber: number; width: number; onRendered?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
   const [aspectRatio, setAspectRatio] = useState(612 / 792);
@@ -27,28 +27,27 @@ function PdfPage({ document, pageNumber, width }: { document: PDFDocumentProxy; 
         canvas.style.height = `${viewport.height}px`;
         task = page.render({ canvas, viewport, transform: [pixelRatio, 0, 0, pixelRatio, 0, 0] });
         await task.promise;
-        if (!cancelled) { setRenderedWidth(width); setError(false); }
+        if (!cancelled) { setRenderedWidth(width); setError(false); onRendered?.(); }
       } catch {
         if (!cancelled) setError(true);
       }
     }
     void render();
     return () => { cancelled = true; task?.cancel(); };
-  }, [document, pageNumber, width]);
+  }, [document, pageNumber, width, onRendered]);
 
   return (
     <div>
-      <p className="mb-2 text-center text-xs text-slate-500 tabular-nums">Page {pageNumber} of {document.numPages}</p>
       <div className="relative overflow-hidden bg-white shadow-sm" style={{ aspectRatio }}>
-        {error && <p role="alert" className="p-4 text-sm text-red-700">Page {pageNumber} could not be displayed. Your Markdown edits are still available.</p>}
+        {error && <p role="alert" className="p-4 text-sm text-red-700">Page {pageNumber} could not be displayed. Your uploaded PDF is still stored.</p>}
         {!error && renderedWidth !== width && <p role="status" className="p-4 text-sm text-slate-500">Loading page {pageNumber}…</p>}
-        <canvas ref={canvasRef} role="img" aria-label={`Original PDF, page ${pageNumber}. Extracted content is available in the Markdown editor.`} className={`absolute inset-0 ${renderedWidth === width && width > 0 && !error ? "block" : "hidden"}`} />
+        <canvas ref={canvasRef} role="img" aria-label={`Original PDF, page ${pageNumber}. `} className={`absolute inset-0 ${renderedWidth === width && width > 0 && !error ? "block" : "hidden"}`} />
       </div>
     </div>
   );
 }
 
-export function OriginalPdf({ document }: { document: PDFDocumentProxy }) {
+export function OriginalPdf({ document, onFirstPageRendered }: { document: PDFDocumentProxy; onFirstPageRendered?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -64,8 +63,8 @@ export function OriginalPdf({ document }: { document: PDFDocumentProxy }) {
   }, []);
 
   return (
-    <div ref={containerRef} role="region" aria-label="Original PDF pages" tabIndex={0} className="h-full space-y-6 overflow-auto bg-slate-100 p-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px]" style={{ scrollbarGutter: "stable" }}>
-      {Array.from({ length: document.numPages }, (_, index) => <PdfPage key={index + 1} document={document} pageNumber={index + 1} width={width} />)}
+    <div ref={containerRef} role="region" aria-label="Original PDF pages" tabIndex={0} className="h-full overflow-x-hidden overflow-y-auto overscroll-contain bg-[#eeece6] outline-none [&>div+div]:mt-3" style={{ scrollbarGutter: "stable" }}>
+      {Array.from({ length: document.numPages }, (_, index) => <PdfPage key={index + 1} document={document} pageNumber={index + 1} width={width} onRendered={index === 0 ? onFirstPageRendered : undefined} />)}
     </div>
   );
 }

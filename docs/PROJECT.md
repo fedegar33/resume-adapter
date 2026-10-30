@@ -1,213 +1,244 @@
 # Resume Adapter — project decisions
 
-Confirmed with Federico on October 27, 2026. This document preserves planning
-decisions; it is not a list of features that have already been built.
+Current state after cleanup on October 30, 2026. This document distinguishes
+working functionality from approved design and future product work.
 
-## Current status and authorization
+## Goal and boundaries
 
-The initial scaffolding delivery is complete. On October 28, 2026, Federico
-authorized the first feature: local master PDF upload with Storage and database
-persistence. Federico subsequently reported that Storage and database persistence
-are working. The agent has not independently verified the remote configuration.
-The upload feature was committed and pushed as `7cceed8` before starting the
-second feature.
+A simple personal tool for adapting Federico's English CV to a pasted job
+description, reviewing changes, and downloading a PDF. Target this CV rather
+than a general-purpose importer or multiuser application tracking system.
 
-Federico then authorized text extraction, Markdown organization, and a review
-interface with editable Markdown and the original PDF side by side. Federico
-then requested the PDF on the left, Markdown on the right, and continuous PDF
-scrolling in place of previous/next page controls.
-These are implemented locally. Master validation/activation, adaptation, block
-review, application persistence, and final PDF generation are not implemented.
+- The wizard supports one active confirmed master. Every future adaptation starts
+  from that master.
+- Preserve employers/projects, chronology, job titles and dates. Do not invent
+  responsibilities, metrics, skills, technologies or other facts.
+- On October 29, Federico replaced the About/Experience/Stack-only restriction:
+  every extracted section can be selected as adaptable. Detailed adaptation
+  semantics are deferred; this delivery stores eligibility without implementing
+  editing or adaptation.
+- Keep personal CVs, secrets and exported traces out of the repository/public assets.
+- No OCR, translation, RAG, autonomous agents, queues, draft history or authentication
+  has been added. Public hosting/access control is unresolved; data endpoints are
+  restricted to same-origin local development.
 
-### First feature: confirmed upload scope
+## Working flow on `/`
 
-- One file per selection through **Upload Master Resume**; disabled button with
-  **Uploading…** while the request is running, inline success/error feedback.
-- Server validation: real PDF signature and readable document/page tree, nonempty,
-  at most 10 MB (10,485,760 bytes), no encryption/password protection. This does
-  not validate resume contents or require selectable text.
-- Use the existing `resumes` bucket, which the user created. Require it to be
-  private before sending files; remote settings were not inspected.
-- Each upload is independent, including repeated original filenames. Store under
-  `masters/<uuid>.pdf`; keep original filename, byte size, MIME type, bucket,
-  path, UUID, and database timestamp in `master_resume_uploads`.
-- Uploading does not activate or validate a master.
-- Show `<filename> uploaded!` only after Storage and the insert succeed. If an
-  insert is explicitly rejected, attempt object removal; surface failed cleanup.
-  A missing/ambiguous insert response preserves the object to avoid deleting a
-  possibly committed record’s PDF, and asks the user to inspect before retrying.
-  Storage and Postgres do not form an atomic transaction; process interruption
-  may require manual reconciliation.
-- Local development only: bind the dev server to loopback and enforce same-origin,
-  loopback requests in development. Production uploads remain disabled pending
-  access control. Do not expose the dev server through tunnels/proxies.
-- Deliver SQL and setup instructions for the user to apply; no remote changes
-  or real resume uploads were authorized for local verification. See
-  [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
-- Offline tests cover PDF validation, local access, multipart limits, independent
-  uploads, private-bucket enforcement, and Storage/DB compensation failures.
+1. Validate an unencrypted, readable PDF: nonempty, at most 10 MB, real signature
+   and page tree. Validation alone does not prove it is a CV.
+2. Upload an independent private object at `masters/<uuid>.pdf` in the existing
+   `resumes` bucket and insert metadata in `master_resume_uploads`. Repeated
+   filenames create separate uploads. A rejected insert triggers compensating
+   object cleanup; an ambiguous response preserves the possibly referenced PDF.
+3. Read the authoritative private PDF and send its complete bytes inline to the
+   configured OpenAI Responses model. Extract CV classification, name, role and
+   ordered top-level section headings with a strict structured response.
+4. Prefer the explicit headline role, otherwise the most recent unambiguous printed
+   title. Unknown name/role stays null. Preserve unfamiliar headings; deduplicate
+   repeated page headings and generate metadata section UUIDs on the server.
+5. Reject non-resumes. Provider/schema/refusal/truncation failures show safe errors;
+   there are no automatic retries, tools, or agent loops.
+6. Convert the stored PDF with a pinned pdf2htmlEX Linux amd64 image in local Docker.
+   Stream bytes over stdin with no host mounts/network or credentials in the
+   container. Temporary files are removed. This image was verified on the arm64 Mac.
+7. Present the approved wizard with real extracted candidate details and section
+   checkboxes. Every section is eligible and initially selected. Missing candidate
+   values remain unknown, and no headings are invented when extraction finds none.
+8. Confirm the master to save candidate/sections, section eligibility and raw HTML
+   in `confirmed_master_resumes`, referencing the original private upload. A single
+   Postgres function inserts an immutable snapshot and switches the singleton
+   `active_master_resume` pointer atomically. No original PDF is overwritten.
+9. Restore the active master on future visits, without AI extraction or conversion.
+   Ready shows a real first-page PDF thumbnail and the pending Create adaptation CTA.
+10. The retired technical inspection UI and its unused helpers have been removed;
+    extraction/conversion and confirmed content persistence continue.
+11. Replace repeats upload/processing/review. The previous master remains
+    active until successful confirmation. Canceling or failures preserve it.
 
-### Second feature: extraction and content review
+States are Opening → Welcome → Uploading → Reading resume → Converting →
+Section review → Confirming → Ready, plus safe error states.
+Unconfirmed reviews are intentionally not restored: reopening returns to the
+confirmed master or welcome, and a new upload is required. Original uploads from
+abandoned reviews are retained; no cleanup/background job has been added.
+Exact confirmation retries are idempotent. An expected active ID prevents another
+tab's stale replacement from silently overwriting a newer selection.
 
-- After upload succeeds, open the same selected PDF locally in the browser with
-  PDF.js. Share the document between text extraction and original-page rendering;
-  do not create public URLs, download from Storage again, or call an AI service.
-- Propose Markdown from positional text fragments, font differences, font sizes,
-  and spacing. Recognize common section headings; propose nested project headings
-  within Experience. Preserve text and dates without rewriting facts.
-- Join wrapped lines into paragraphs; cautiously join lower-case continuations
-  across physical page breaks. Retain ambiguous breaks for manual correction.
-  This is heuristic organization, not verified semantic extraction.
-- Preserve safe HTTP(S), mailto, and telephone annotation links; discard executable
-  link targets and escape source Markdown/HTML punctuation. Neither PDF text nor
-  edited Markdown is executed or rendered as HTML.
-- Desktop: original PDF on the **left**, Markdown editor on the **right**. The
-  original displays all pages in a vertically scrollable panel, with page labels
-  and no previous/next buttons, and scales to the panel width. On small
-  screens, switch between Edit Markdown and Original PDF without losing edits.
-- Reuse Monaco as a single editor with wrapping and an editable textarea fallback
-  during loading. The DiffEditor remains reserved for adaptation comparison later.
-- Preserve the existing successful upload if extraction fails; show a distinct
-  explanation and allow manual typing/pasting. Empty/scanned PDFs show a no-text
-  message; OCR is not implemented. An upload error leaves the current review intact.
-- Markdown corrections exist in the current tab only; they are not persisted or
-  approved. Warn on reload/close and before replacing edited content with another
-  upload. Reloading does not reopen an uploaded PDF automatically.
-- No content approval, master activation, template preview, or new database schema
-  is introduced. Saving reviewed content belongs to the next phase.
-- Offline tests use synthetic two-page PDFs and cover extraction, heading/project
-  organization, paragraphs across pages, bullets, links, empty pages, and cancellation.
+Implementation requires the new manual migration
+`202610290001_confirmed_master_resumes.sql` in the existing Supabase project.
+The migration is prepared locally; it has not been applied remotely by the agent.
+Existing upload installations need only this new migration, not the historical
+content experiment. RLS/grants restrict tables/functions to the backend role;
+GET readers require the local gate and a custom header to prevent cross-origin
+browser reads. Production data routes remain disabled. Extracted content is
+validated for shape, permissions must match section IDs exactly, and HTML remains
+untrusted and isolated. Confirmation is user approval, not factual verification.
+Metadata IDs still do not map to HTML elements. No adaptation endpoint exists.
 
-## Goal
+Setup: [SUPABASE_SETUP.md](SUPABASE_SETUP.md), [RESUME_METADATA.md](RESUME_METADATA.md),
+and [PDF_HTML.md](PDF_HTML.md).
 
-A simple, polished personal tool for adapting an English resume to a job
-description, reviewing changes, and downloading a PDF copy. This is not a
-multiuser product or a complete application tracking system.
+## Approved design reference
 
-## Agreed workflow
+The original design prototype was approved on October 29, 2026 and informed the
+real wizard. On October 30, Federico requested deleting the separate prototype,
+including its route, demo state, fictional PDF and generator. The real UI below
+is now the reference; its shared fonts and licenses live in `src/app/fonts/`.
 
-1. Upload a simple master PDF with selectable text.
-2. Extract its text and organize it as Markdown; review/correct the conversion.
-3. Validate a dedicated visual template resembling the original resume.
-4. Save and activate the validated master.
-5. Paste a job description; the LLM interprets its requirements.
-6. Generate a moderate adaptation from the active master.
-7. Compare the master and proposal side by side, with red/green and inline changes.
-8. Accept/reject blocks and edit the proposal in Markdown.
-9. Preview the actual PDF before finalizing.
-10. Save the job description, exact master reference, and final PDF; download it.
+### Minimal real-wizard styling
 
-## Master and storage
+Later on October 29, Federico approved a visual refinement for the real `/`
+wizard, inspired by Interface Craft and federicogarcia.me.
 
-- One active, replaceable master. English only initially, without translation.
-- Preserve the original PDF, approved Markdown, and template configuration.
-- Replacing the master creates a new version: retain versions used by previous
-  applications. Reference versions without duplicating PDFs for each application.
-- Supabase Postgres for records; Supabase Storage for PDFs, in a private bucket.
-- Each application stores the job description, master used, and final PDF. Do not
-  save drafts, initial proposals, individual edits, or final Markdown by default.
-- Unfinalized changes may be lost when the page is closed or reloaded.
-- Database backups and file backups are separate concerns.
+- Warm white background `#FAF9F6`, charcoal text/buttons, warm neutral dividers.
+- Keep EB Garamond headings and Instrument Sans UI, with 32–40 px headings,
+  straightforward labels and no ornamental italic phrases or intro paragraphs.
+- Welcome says **Your master resume** with **Add resume**. Section review says
+  **Choose adaptable sections**, shows candidate name/role and checkboxes, and
+  confirms with **Confirm master**. Compact processing labels show real progress.
+- Ready uses two columns on desktop: the small PDF with **Replace** below its
+  filename on the left, and candidate name/role and eligible-section count on the
+  right. Inspect has been removed. Beneath the details, an adaptations region
+  currently shows **Create your first adaptation** with **Create adaptation** below. This region is reserved
+  for the future adaptation list; no list, persistence or creation flow is implemented.
+  On mobile, stack the PDF above the content. No second decorative sheet/footer.
+- This two-column layout and first-adaptation empty state were requested after
+  the initially approved centered composition on October 29, 2026.
+- The thumbnail is 210 px wide on desktop, 180 px on mobile, with a 16 px corner
+  radius and soft shadow. It represents only the first page. Fine-pointer hover
+  scales the preview to 1.025 over 180 ms and returns smoothly; the hover wrapper
+  is separate from the pop so the transforms do not compete. The hit area stays
+  stationary. Touch devices and reduced-motion mode do not use hover scaling.
+- After the persisted preview image loads (originally after PDF.js rendering),
+  play a 500 ms pop on every ready-screen entry,
+  including reload and canceled replacement: opacity 0→1, rotateX -12°→1.5°→0°,
+  scale .9→1.1→1. The peak occurs at 300 ms. No loop or resting rotation.
+- Reduced motion uses a 120 ms opacity-only fade, without scale or rotation.
+  Motion uses CSS transform/opacity only, without adding dependencies. Color/font tokens live in `src/app/globals.css`;
+  the animation storyboard and sequence keyframes live in `src/app/wizard.css`.
+- The real wizard uses Tailwind utilities and dedicated animation sequences.
+  Persistence and adaptation scope are unchanged.
 
-## Editing policy
+### SSR, cache and PDF viewer
 
-| Section | Allowed changes |
-| --- | --- |
-| About / Professional Summary | Faithful rewriting with relevant emphasis |
-| Experience | Adapt and moderately shorten descriptions |
-| Stack / Skills | Select, group, and reorder existing technologies |
-| Header, Education, Certifications, Languages | Preserve |
+Approved and implemented October 30, 2026 after a grilling session. The initial
+client restore waterfall is replaced by server-rendered master summary data and a
+stable skeleton. The mutable active pointer is read fresh; immutable summary,
+thumbnail and PDF reads use Next Cache Components by master ID/project namespace.
+No converted HTML is sent in the initial UI payload. Versioned private HTTP assets
+cache for one day with ETags; the open page reuses its PDF promise/File.
 
-Experience retains all employers and projects in chronological order.
-Preserve employers, job titles, dates, and the employer → project relationship.
-The LLM must not invent metrics, technologies, responsibilities, or facts.
-When evidence is missing, show questions/suggestions separately without blocking
-the workflow. Do not impose a page count or artificially repeat keywords.
+New confirmations generate a first-page PNG from the authoritative PDF on the
+server and store it in the existing snapshot JSON. No new SQL migration or Storage
+bucket policy is required for this change. Older snapshots generate a local
+private derived PNG on first read without mutating historical content. See
+[CACHING.md](CACHING.md) for exact policies, storage and cache lifetimes.
 
-## Markdown, comparison, and PDF
+The thumbnail now opens a PDF-only scrollable viewer with a dim overlay. Motion
+uses shared layout between thumbnail and viewer; Radix provides accessible modal
+behavior with overlay/Escape and a close icon inside the top-right corner. Closing returns focus to the
+thumbnail. Reduced motion uses fades. PDF download starts after the preview image,
+and PDF.js/worker load on opening. Motion and Radix Dialog are the only added
+packages. No adaptation flow or authentication/deployment work is included.
 
-- A limited Markdown subset: headings, paragraphs, lists, bold, and links.
-- No tables, embedded HTML, arbitrary columns, or executable content.
-- One logical line per paragraph, with visual line wrapping in the editor.
-- Monaco with a read-only original on the left and an editable proposal on the right.
-- Monaco computes textual differences. Semantic block approval, section protection,
-  and review tracking remain application logic to be implemented.
-- Rebuild the PDF using a dedicated template; do not patch the original PDF.
-- Preserve the approximate style: fonts, colors, spacing, and margins. Allow extra
-  pages and new logical page breaks when text length changes.
-- Visually verify that there is no clipped/overlapping text or stranded headings.
+The preview disables selection/native image dragging locally. The expanded viewer
+was widened another 10% after the first 20% increase (desktop cap 1003.2 px), keeping viewport-bounded height
+and vertical scrolling; its close button sits inside the document at top right.
 
-## Inspected visual reference
+Offline verification uses synthetic data. An isolated local Next instance and
+synthetic Supabase were tested for SSR, actual cache reuse, new active-pointer
+reads, conditional 304, the complete viewer, mobile/reduced motion, and legacy
+preview generation. Initial synthetic CLS measured 0. Live personal data/services
+were not used. Existing API gates were adjusted to handle Next normalizing the
+internal URL to localhost while preserving a validated loopback Host/Origin.
 
-The shared resume has three Letter pages, a single column, selectable text,
-links, and no images. It does not require OCR. Experience contains employers
-with nested projects and paragraph descriptions; bullets are not mandatory.
+## Observability
 
-Physical page breaks in the original do not define blocks: one description and
-one Education entry span pages and must be rejoined during extraction.
+Federico explicitly authorized logging original filenames and output JSON for
+personal use on October 29, 2026. Braintrust uses AI SDK 7 automatic telemetry,
+with PDF/prompt input recording disabled and output recording enabled.
+A native `traced` parent attaches authoritative filename/upload ID and the final
+application JSON; child traces contain raw model output, timings and token usage.
+Provider errors are sanitized centrally. No custom per-call recorder is needed.
+See [OBSERVABILITY.md](OBSERVABILITY.md).
 
-Style reference: Instrument Sans for body text; EB Garamond Bold for the name;
-blue headings (#3D85C6), dark gray (#353744), body text around 11 pt, and a 72 pt
-left margin. Final top/bottom margins will be adjusted in the template. The PDF
-contains subset fonts: obtain complete font files or agree on replacements,
-without assuming the embedded subsets can be reused for new text.
-The personal resume stays outside the repository and `public/`.
+## Current stack and verification
 
-## Selected stack and initial configuration
+Next.js App Router, React, strict TypeScript, Tailwind, pnpm 10.33.2 and Node 24.
+AI SDK 7 + OpenAI, Zod, Braintrust 3.40.0, Supabase Postgres/Storage and PDF.js.
+The model remains server-configured (`gpt-6.1-sol`, low reasoning initially).
+React PDF, Monaco and unified/remark were removed because no current feature
+uses them.
 
-- Next.js App Router, React, TypeScript, Tailwind CSS; pnpm and Node 24.
-- Webpack for dev/build and Tailwind via PostCSS. Turbopack could not compile in
-  this task's environment because an internal port was blocked; this is not a product requirement.
-- AI SDK 7 + the official OpenAI provider. On October 28, 2026, selected
-  `gpt-6.1-sol` with `low` reasoning effort. Both are server-configured through
-  `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT`, with no model selector in the UI.
-  The model factory applies reasoning defaults through AI SDK middleware.
-- Zod for structures and environment variables; it does not verify factual accuracy.
-- Braintrust 3.40.0 for traces. Next.js auto-instrumentation through the config
-  wrapper, with AI SDK 7 telemetry registration. The logger uses the fixed project
-  `resume-adapter` and SDK credential discovery. It may record inputs/outputs.
-  Tracing setup was updated on October 28, 2026; verification is static only,
-  without running the application or sending sample traces.
-- Evals will come later, defined in code; there is no dataset or scorer setup yet.
-- Supabase JS with a backend secret client; no session auth/SSR integration yet.
-- `monaco-editor` + `@monaco-editor/react`, serving installed assets locally.
-- `pdfjs-dist` prepared with a local worker, CMaps, standard fonts, and WASM.
-- `@react-pdf/renderer` for output; initial styles, without an implemented template.
-- unified + remark-parse/stringify for Markdown parsing and serialization.
-  Allowed-node validation is not implemented yet.
+Run `pnpm test`, `pnpm check` and `pnpm build` after relevant changes. Verification
+uses synthetic PDFs, mocked provider/Storage/DB/Docker calls, and browser tests.
+Actual pdf2htmlEX output was also checked using synthetic data. The real wizard
+was checked in a browser with synthetic PDFs and intercepted API responses,
+including restore, selection, cancellation, replacement, failure preservation,
+discarded unconfirmed reviews, mobile layout and reduced motion. The new SQL
+transaction has not been run against the remote database. Federico reported
+good results with his CV; the agent does not upload real CVs, run paid model
+calls or send live traces as part of local verification.
 
-## Outside the MVP / explicit pending decisions
+## Remaining work
 
-- URL extraction: pasted text only for now.
-- OCR, protected or complex-layout PDFs; multiple active masters; translation.
-- Draft recovery, per-edit history, and a visual WYSIWYG editor.
-- Autonomous agents, RAG, embeddings, queues, and multiple providers/models in the UI.
-- Hosting and access control/authentication remain pending. The intended deployment
-  is a public website, but resumes and the bucket are not public. Before exposing
-  operations on real data or paid API calls, decide who can invoke them.
-- The user created the remote `resumes` bucket. The upload schema migration is
-  prepared for manual application; remote verification, the remaining product
-  schema, and generated database types are pending.
-- Complete font files and the final template remain pending.
+- Apply the prepared confirmed-master migration to the existing Supabase project
+  and verify the real workflow with a user-selected file.
+- Define detailed adaptation rules for selectable sections before implementing
+  adaptation. Any section can be selected; eligibility alone is not an editor.
+- Evaluate how converted HTML can identify editable semantic blocks and reflow
+  when descriptions change length. Representation and final PDF rendering remain
+  open decisions; do not assume fixed-position HTML already handles this.
+- Implement job interpretation, adaptation from the master, accept/reject review,
+  preview and final PDF download. Review/diff tooling will be chosen when needed.
+- Preserve immutable master versions used by finalized applications; each finalized
+  application should reference its master, job description and final PDF.
+- Resolve access/deployment and add evals later. The visual review agent is deferred.
 
-## Remaining implementation order
+## Visual reference
 
-1. Complete the round trip: review extraction quality with the reference PDF,
-   build the visual template, and generate a matching PDF from reviewed Markdown.
-2. Implement job interpretation and structured adaptation with OpenAI/Zod.
-3. Implement block review on top of Monaco and the final preview.
-4. Add immutable master persistence and finalized applications in Supabase.
-5. Resolve access/deployment and introduce evals when that phase is defined.
+The reference CV has three Letter pages, one column, selectable text, links and no
+images. Experience has employers with projects and paragraphs. A description and
+an Education entry cross page breaks; physical page breaks do not define blocks.
+Original styling: Instrument Sans body, EB Garamond Bold name, blue headings
+(#3D85C6), dark gray (#353744), about 11 pt body and 72 pt left margin. New text
+must not rely on embedded subset fonts. Complete fonts are available for the
+real UI; a real export template remains pending.
 
-## Technical references
+## Historical deliveries and cleanup
 
-- https://nextjs.org/docs/app
-- https://tailwindcss.com/docs
-- https://ai-sdk.dev/docs
-- https://developers.openai.com/api/docs/models
-- https://www.braintrust.dev/docs/integrations/sdk-integrations/vercel
-- https://supabase.com/docs/guides/storage/buckets/fundamentals
-- https://github.com/suren-atoyan/monaco-react
-- https://mozilla.github.io/pdf.js/
-- https://react-pdf.org/
-- https://github.com/remarkjs/remark
+- Upload was committed/pushed as `7cceed8`; heuristic Markdown review as `826445c`.
+- Whole-document Markdown, source-grounded full-content JSON, section editing and
+  immutable reviewed-content saving were experiments, superseded by the current
+  full-PDF metadata + pdf2htmlEX flow.
+- On October 29, 2026 Federico authorized removing unused experiment code. The old
+  extractors, review schemas, editor components, their tests/fixtures and unused
+  Monaco/Markdown dependencies were removed. Active behavior and approved prototype
+  remain intact. Historical setup instructions were replaced with current guides.
+- `202610280002_master_resume_contents.sql` remains as migration history because
+  it may already have been applied. It is unused and not required by the current
+  app. No remote schema/data changes or cleanup were performed.
+
+## Tailwind styling
+
+On October 30, 2026, the real wizard, SSR skeleton and PDF viewer were migrated
+to the already installed Tailwind CSS 4 pipeline. Layout, responsive rules,
+colors, typography and control states now use utilities. Shared Tailwind recipes
+in `src/components/wizard-styles.ts` keep skeleton and ready geometry aligned;
+`src/app/globals.css` defines the palette and font theme tokens.
+`src/app/wizard.css` retains only the scene/pop animation sequences and their
+reduced-motion/hover handling. No package changes were needed.
+The separate prototype was subsequently removed during cleanup. Converted
+master HTML remains untouched.
+
+## October 30 cleanup
+
+Removed the separate prototype route/components/data/CSS, fictional PDF and
+generator, unused italic font, and `@react-pdf/renderer` with its exclusive
+transitive dependencies. Retained the two UI fonts and their OFL licenses.
+Removed the unreachable inspection/upload UI and static HTML preview wrapper.
+The original PDF viewer now has one mode, used by the modal.
+Removed `/api/master-resume/active` and `/api/master-resume/pdf`, their full-snapshot
+reader and unused schema/types: SSR and versioned assets supersede them. Tests
+now exercise the current readers and endpoints. Conversion and raw HTML
+persistence remain active; the two setup/assets scripts and historical SQL
+migrations remain necessary. No local personal documents or remote data were deleted.

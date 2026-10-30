@@ -6,7 +6,6 @@ import { storeResume } from "@/lib/resumes/store.server";
 import { ResumeUploadError } from "@/lib/resumes/upload";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {

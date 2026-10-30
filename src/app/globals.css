@@ -2,10 +2,20 @@
 
 @theme {
   --font-sans: Arial, Helvetica, sans-serif;
+  --color-wizard-bg: #faf9f6;
+  --color-wizard-ink: #252523;
+  --color-wizard-accent: #292927;
+  --color-wizard-muted: #73716b;
+  --color-wizard-rule: #e7e5df;
 }
 
 body {
   background: #ffffff;
   color: #172033;
   font-family: var(--font-sans);
+}
+
+@theme inline {
+  --font-ui: var(--resume-sans), sans-serif;
+  --font-display: var(--resume-serif), Georgia, serif;
 }

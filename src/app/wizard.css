@@ -1,0 +1,28 @@
+/* Sequence-only CSS: layout, color, type and controls use Tailwind utilities.
+ * Scene: fade in 230ms, fade out 130ms (100/70ms with reduced motion).
+ * Master pop after the persisted image loads: .9/-12deg → 1.1/1.5deg → 1.
+ * Separate hover/pop wrappers keep their transforms independent.
+ */
+.wizard-scene { animation: wizard-master-fade 230ms ease-out; transition: opacity 130ms ease-out; }
+.wizard-scene.is-leaving { animation: none; opacity: 0; }
+.wizard-thumbnail {
+  --master-pop-start: perspective(850px) rotateX(-12deg) scale(.9);
+  --master-pop-peak: perspective(850px) rotateX(1.5deg) scale(1.1);
+  --master-pop-end: perspective(850px) rotateX(0deg) scale(1);
+}
+.wizard-thumbnail-hover { transition: transform 180ms cubic-bezier(.2, .8, .2, 1); }
+.wizard-thumbnail[data-state="ready"] .wizard-thumbnail-pop { animation: wizard-master-pop 500ms both; transform-origin: center; }
+@keyframes wizard-master-pop {
+  0% { opacity: 0; transform: var(--master-pop-start); animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
+  60% { opacity: 1; transform: var(--master-pop-peak); animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+  100% { opacity: 1; transform: var(--master-pop-end); }
+}
+@keyframes wizard-master-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .wizard-thumbnail[data-state="ready"] .wizard-thumbnail-preview:hover .wizard-thumbnail-hover { transform: scale(1.025); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wizard-scene { animation-duration: 100ms; transition-duration: 70ms; }
+  .wizard-thumbnail-hover { transition: none; }
+  .wizard-thumbnail[data-state="ready"] .wizard-thumbnail-pop { animation: wizard-master-fade 120ms ease-out both; }
+}

@@ -7,7 +7,7 @@ export const pdfReaderOptions = {
   wasmUrl: "/vendor/pdfjs/wasm/",
 } as const;
 
-// Shared browser reader for extraction and the original PDF preview.
+// Browser reader for the original PDF viewer.
 export async function getPdfReader() {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.mjs";

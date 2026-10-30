@@ -7,6 +7,9 @@ registerHooks({
     return nextLoad(url, url.endsWith(".ts") ? { ...context, format: "module-typescript" } : context);
   },
   resolve(specifier, context, nextResolve) {
+    // Next executes cache scopes in integration tests. Unit tests exercise the
+    // underlying reads without its compiler/runtime.
+    if (specifier === "next/cache") return { url: "data:text/javascript,export function cacheLife() {}", shortCircuit: true };
     if (specifier === "server-only" || specifier === "client-only") {
       return { url: "data:text/javascript,export {};", shortCircuit: true };
     }
